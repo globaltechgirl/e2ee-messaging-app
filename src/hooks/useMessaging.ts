@@ -348,28 +348,6 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       }));
       setConversations((current) => upsertConversation(current, user));
 
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(
-          JSON.stringify({
-            type: "message.send",
-            payload: {
-              to: userId,
-              payload,
-            },
-          }),
-        );
-
-        if (refreshTimerRef.current) {
-          window.clearTimeout(refreshTimerRef.current);
-        }
-
-        refreshTimerRef.current = window.setTimeout(() => {
-          void loadConversationMessages(userId);
-          void loadConversations();
-        }, 1200);
-        return;
-      }
-
       const storedMessage = await api.sendMessage(userId, payload);
       await upsertDeliveredMessage(storedMessage, "rest");
       await loadConversations();
