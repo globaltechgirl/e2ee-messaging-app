@@ -1,0 +1,10 @@
+node_modules
+dist
+.npm-cache
+.appdata
+.localappdata
+vite.log
+vite.err.log
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
