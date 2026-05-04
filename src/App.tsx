@@ -28,6 +28,26 @@ export default function App() {
   const sessionRef = useRef<SessionSnapshot | null>(null);
   const apiRef = useRef<WhisperApiClient | null>(null);
 
+  async function persistSessionSafely(snapshot: SessionSnapshot) {
+    try {
+      await savePersistedSession({
+        refreshToken: snapshot.refreshToken,
+        user: snapshot.user,
+        savedAt: new Date().toISOString(),
+      });
+    } catch {
+      // Live sessions should continue even if durable browser storage is unavailable.
+    }
+  }
+
+  async function clearSessionSafely() {
+    try {
+      await clearPersistedSession();
+    } catch {
+      // Ignore storage cleanup failures during logout or expiry handling.
+    }
+  }
+
   function handleTokenUpdate(token: TokenResponse) {
     const expiresAt = Date.now() + token.expires_in * 1000;
 
@@ -68,7 +88,7 @@ export default function App() {
 
   async function handleSessionExpired() {
     sessionRef.current = null;
-    await clearPersistedSession();
+    await clearSessionSafely();
     setState({
       kind: "anonymous",
     });
@@ -115,10 +135,11 @@ export default function App() {
 
         const refreshed = await api.refreshAccessToken();
         const profile = await api.me();
-        await savePersistedSession({
+        await persistSessionSafely({
+          accessToken: refreshed.access_token,
           refreshToken: persisted.refreshToken,
+          expiresAt: Date.now() + refreshed.expires_in * 1000,
           user: profile,
-          savedAt: new Date().toISOString(),
         });
 
         if (!cancelled) {
@@ -134,7 +155,7 @@ export default function App() {
           });
         }
       } catch {
-        await clearPersistedSession();
+        await clearSessionSafely();
 
         if (!cancelled) {
           setState({
@@ -186,16 +207,11 @@ export default function App() {
       user: nextSession.user,
     };
 
-    await savePersistedSession({
-      refreshToken: response.refresh_token,
-      user: response.user,
-      savedAt: new Date().toISOString(),
-    });
-
     setState({
       kind: "ready",
       session: nextSession,
     });
+    await persistSessionSafely(nextSession);
     setAuthError(null);
     setUnlockError(null);
   }
@@ -205,9 +221,11 @@ export default function App() {
     setAuthError(null);
 
     try {
-      const response = await api.login(form);
+      const normalizedForm = normalizeLoginForm(form);
+      validateLoginForm(normalizedForm);
+      const response = await api.login(normalizedForm);
       const privateKey = await unwrapPrivateKey(
-        form.password,
+        normalizedForm.password,
         response.user.wrapped_private_key,
         response.user.pbkdf2_salt,
       );
@@ -225,9 +243,11 @@ export default function App() {
     setAuthError(null);
 
     try {
-      const identity = await generateIdentity(form.password);
+      const normalizedForm = normalizeRegisterForm(form);
+      validateRegisterForm(normalizedForm);
+      const identity = await generateIdentity(normalizedForm.password);
       const response = await api.register({
-        ...form,
+        ...normalizedForm,
         publicKey: identity.publicKey,
         wrappedPrivateKey: identity.wrappedPrivateKey,
         pbkdf2Salt: identity.pbkdf2Salt,
@@ -277,7 +297,7 @@ export default function App() {
       // Clear local state even when token revocation fails.
     } finally {
       sessionRef.current = null;
-      await clearPersistedSession();
+      await clearSessionSafely();
       setState({
         kind: "anonymous",
       });
@@ -305,7 +325,10 @@ export default function App() {
         error={authError}
         mode={authMode}
         onLogin={handleLogin}
-        onModeChange={setAuthMode}
+        onModeChange={(mode) => {
+          setAuthMode(mode);
+          setAuthError(null);
+        }}
         onRegister={handleRegister}
       />
     );
@@ -349,10 +372,10 @@ export default function App() {
         onLoadOlder={messaging.loadOlderMessages}
         onSend={async (value) => {
           if (!messaging.activeConversation) {
-            return;
+            return false;
           }
 
-          await messaging.sendMessage(messaging.activeConversation, value);
+          return messaging.sendMessage(messaging.activeConversation, value);
         }}
       />
     </main>
@@ -379,4 +402,49 @@ function snapshotFromState(state: AuthViewState): SessionSnapshot | null {
   }
 
   return null;
+}
+
+function normalizeLoginForm(form: LoginForm): LoginForm {
+  return {
+    username: form.username.trim().toLowerCase(),
+    password: form.password,
+  };
+}
+
+function normalizeRegisterForm(form: RegisterForm): RegisterForm {
+  return {
+    username: form.username.trim().toLowerCase(),
+    displayName: form.displayName.trim(),
+    password: form.password,
+  };
+}
+
+function validateLoginForm(form: LoginForm) {
+  if (form.username.length < 3) {
+    throw new Error("Username must be at least 3 characters.");
+  }
+
+  if (form.username.length > 32) {
+    throw new Error("Username must be 32 characters or fewer.");
+  }
+
+  if (form.password.length < 8) {
+    throw new Error("Password must be at least 8 characters.");
+  }
+
+  if (form.password.length > 128) {
+    throw new Error("Password must be 128 characters or fewer.");
+  }
+}
+
+function validateRegisterForm(form: RegisterForm) {
+  validateLoginForm(form);
+
+  if (!form.displayName) {
+    throw new Error("Display name is required.");
+  }
+
+  if (form.displayName.length > 128) {
+    throw new Error("Display name must be 128 characters or fewer.");
+  }
 }

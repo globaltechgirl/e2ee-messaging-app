@@ -12,7 +12,19 @@ export interface GeneratedIdentity {
   privateKey: CryptoKey;
 }
 
+function ensureCryptoAvailable() {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Web Crypto API is not available in this browser.");
+  }
+
+  if (typeof window !== "undefined" && !window.isSecureContext) {
+    throw new Error("A secure context is required. Open WhisperBox over HTTPS or localhost.");
+  }
+}
+
 async function deriveWrappingKey(password: string, saltBase64: string): Promise<CryptoKey> {
+  ensureCryptoAvailable();
+
   const baseKey = await crypto.subtle.importKey(
     "raw",
     textToBytes(password),
@@ -34,11 +46,34 @@ async function deriveWrappingKey(password: string, saltBase64: string): Promise<
       length: 256,
     },
     false,
-    ["encrypt", "decrypt"],
+    ["wrapKey", "unwrapKey"],
   );
 }
 
+function serializeWrappedPrivateKey(iv: Uint8Array, ciphertext: ArrayBuffer): string {
+  const normalizedIv = new Uint8Array(iv.buffer, iv.byteOffset, iv.byteLength);
+  return JSON.stringify({
+    iv: arrayBufferToBase64(normalizedIv as unknown as BufferSource),
+    ciphertext: arrayBufferToBase64(ciphertext),
+  });
+}
+
+function deserializeWrappedPrivateKey(serialized: string): { iv: Uint8Array; ciphertext: ArrayBuffer } {
+  const parsed = JSON.parse(serialized) as { iv?: unknown; ciphertext?: unknown };
+
+  if (typeof parsed !== "object" || parsed === null || typeof parsed.iv !== "string" || typeof parsed.ciphertext !== "string") {
+    throw new Error("Invalid wrapped private key payload.");
+  }
+
+  return {
+    iv: new Uint8Array(base64ToArrayBuffer(parsed.iv)) as Uint8Array,
+    ciphertext: base64ToArrayBuffer(parsed.ciphertext),
+  };
+}
+
 export async function importPublicKey(publicKeyBase64: string): Promise<CryptoKey> {
+  ensureCryptoAvailable();
+
   return crypto.subtle.importKey(
     "spki",
     base64ToArrayBuffer(publicKeyBase64),
@@ -46,12 +81,14 @@ export async function importPublicKey(publicKeyBase64: string): Promise<CryptoKe
       name: "RSA-OAEP",
       hash: "SHA-256",
     },
-    true,
+    false,
     ["encrypt"],
   );
 }
 
 export async function generateIdentity(password: string): Promise<GeneratedIdentity> {
+  ensureCryptoAvailable();
+
   const keyPair = await crypto.subtle.generateKey(
     {
       name: "RSA-OAEP",
@@ -65,25 +102,21 @@ export async function generateIdentity(password: string): Promise<GeneratedIdent
   const pbkdf2Salt = randomBase64(PBKDF2_SALT_BYTES);
   const wrappingKey = await deriveWrappingKey(password, pbkdf2Salt);
   const exportedPublicKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
-  const exportedPrivateKey = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
-  const wrappedPrivateKey = await crypto.subtle.encrypt(
+  const iv = new Uint8Array(AES_GCM_IV_BYTES);
+  crypto.getRandomValues(iv);
+  const wrappedPrivateKeyBuffer = await crypto.subtle.wrapKey(
+    "pkcs8",
+    keyPair.privateKey,
+    wrappingKey,
     {
       name: "AES-GCM",
       iv,
     },
-    wrappingKey,
-    exportedPrivateKey,
   );
-
-  // Prepend IV to the encrypted data
-  const wrappedWithIv = new Uint8Array(iv.length + wrappedPrivateKey.byteLength);
-  wrappedWithIv.set(iv);
-  wrappedWithIv.set(new Uint8Array(wrappedPrivateKey), iv.length);
 
   return {
     publicKey: arrayBufferToBase64(exportedPublicKey),
-    wrappedPrivateKey: arrayBufferToBase64(wrappedWithIv),
+    wrappedPrivateKey: serializeWrappedPrivateKey(iv, wrappedPrivateKeyBuffer),
     pbkdf2Salt,
     privateKey: keyPair.privateKey,
   };
@@ -94,29 +127,18 @@ export async function unwrapPrivateKey(
   wrappedPrivateKeyBase64: string,
   pbkdf2SaltBase64: string,
 ): Promise<CryptoKey> {
+  ensureCryptoAvailable();
+
   const wrappingKey = await deriveWrappingKey(password, pbkdf2SaltBase64);
-  const wrappedWithIv = base64ToArrayBuffer(wrappedPrivateKeyBase64);
-  const wrappedData = new Uint8Array(wrappedWithIv);
-
-  if (wrappedData.length < AES_GCM_IV_BYTES) {
-    throw new Error("Invalid wrapped private key data: too short");
-  }
-
-  const iv = wrappedData.slice(0, AES_GCM_IV_BYTES);
-  const encryptedData = wrappedData.slice(AES_GCM_IV_BYTES);
-
-  const decryptedPrivateKey = await crypto.subtle.decrypt(
+  const { iv, ciphertext } = deserializeWrappedPrivateKey(wrappedPrivateKeyBase64);
+  return crypto.subtle.unwrapKey(
+    "pkcs8",
+    ciphertext,
+    wrappingKey,
     {
       name: "AES-GCM",
-      iv,
+      iv: new Uint8Array(iv.buffer, iv.byteOffset, iv.byteLength) as unknown as BufferSource,
     },
-    wrappingKey,
-    encryptedData,
-  );
-
-  return crypto.subtle.importKey(
-    "pkcs8",
-    decryptedPrivateKey,
     {
       name: "RSA-OAEP",
       hash: "SHA-256",
@@ -131,6 +153,8 @@ export async function encryptMessage(
   recipientPublicKeyBase64: string,
   senderPublicKeyBase64: string,
 ): Promise<{ payload: EncryptedPayload; nonce: string }> {
+  ensureCryptoAvailable();
+
   const messageKey = await crypto.subtle.generateKey(
     {
       name: "AES-GCM",
@@ -215,6 +239,8 @@ export async function decryptMessage(
   privateKey: CryptoKey,
   selfUserId: string,
 ): Promise<DecryptedMessage> {
+  ensureCryptoAvailable();
+
   if (!isEncryptedPayload(message.payload)) {
     throw new Error("Unsupported encrypted payload format.");
   }

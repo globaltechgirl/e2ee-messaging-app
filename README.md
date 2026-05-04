@@ -5,7 +5,7 @@ End-to-end encrypted messaging frontend for the WhisperBox API.
 ## Stack
 
 - React + TypeScript + Vite
-- Web Crypto API for RSA-OAEP, AES-GCM, AES-KW, and PBKDF2
+- Web Crypto API for RSA-OAEP, AES-GCM, and PBKDF2
 - IndexedDB for wrapped-session persistence
 - REST + WebSocket integration with `https://whisperbox.koyeb.app`
 
@@ -42,8 +42,8 @@ flowchart LR
 
 1. The client generates an RSA-OAEP key pair in the browser.
 2. The client generates a PBKDF2 salt.
-3. The user password derives an AES-KW wrapping key with PBKDF2.
-4. The RSA private key is wrapped with AES-KW.
+3. The user password derives an AES-GCM wrapping key with PBKDF2.
+4. The RSA private key is wrapped locally with AES-GCM.
 5. The frontend sends only:
    - `public_key`
    - `wrapped_private_key`
@@ -54,8 +54,8 @@ flowchart LR
 
 1. The client logs in with username and password.
 2. The backend returns the wrapped private key and PBKDF2 salt.
-3. The password re-derives the AES-KW wrapping key locally.
-4. The private key is unwrapped into memory only.
+3. The password re-derives the AES-GCM wrapping key locally.
+4. The wrapped payload is decrypted and the RSA private key is restored into memory only.
 5. The refresh token and wrapped key material are persisted in IndexedDB.
 6. On reload, the session can be refreshed, but the user must re-enter the password to unlock the private key again.
 
@@ -97,6 +97,9 @@ flowchart LR
 - Password-derived wrapping key:
   Re-derived on demand with PBKDF2 and never persisted.
 
+- AES-GCM wrapped private key:
+  The PKCS#8 private key is encrypted locally with AES-GCM before it is stored or sent.
+
 - Session persistence:
   Refresh token and user profile are stored in IndexedDB, not `localStorage`.
 
@@ -108,7 +111,7 @@ flowchart LR
 - Uses Web Crypto API primitives requested in the brief:
   - AES-GCM for content encryption
   - RSA-OAEP for key exchange
-  - PBKDF2 + AES-KW for private key wrapping
+  - PBKDF2 + AES-GCM for private key wrapping
 
 - Avoids raw private key persistence:
   The private key is unwrapped only for the live session.
@@ -144,8 +147,8 @@ flowchart LR
 - Forward secrecy and stronger replay defenses would require backend protocol changes.
 - Browser-level visual verification could not be completed in this session because the in-app browser control tool was not exposed, so validation was completed with:
   - successful production build
-  - successful Vite dev server startup
-  - successful local HTTP response check on `http://127.0.0.1:4173`
+  - successful live end-to-end API verification on May 4, 2026 against `https://whisperbox.koyeb.app`
+  - register, login, refresh, search, public-key lookup, encrypted send, history fetch, and sender/recipient decryption all succeeding with temporary test users
 
 ## API Endpoints Used
 

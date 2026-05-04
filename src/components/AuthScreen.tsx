@@ -86,6 +86,7 @@ export function AuthScreen(props: AuthScreenProps) {
               <label>
                 <span>Display name</span>
                 <input
+                  autoCapitalize="words"
                   autoComplete="name"
                   disabled={props.busy}
                   minLength={1}
@@ -104,12 +105,14 @@ export function AuthScreen(props: AuthScreenProps) {
               <label>
                 <span>Username</span>
                 <input
+                  autoCapitalize="none"
                   autoComplete="username"
                   disabled={props.busy}
                   minLength={3}
                   maxLength={32}
                   placeholder="ada_secure"
                   required
+                  spellCheck={false}
                   value={registerForm.username}
                   onChange={(event) =>
                     setRegisterForm((current) => ({
@@ -124,12 +127,14 @@ export function AuthScreen(props: AuthScreenProps) {
             <label>
               <span>Username</span>
               <input
+                autoCapitalize="none"
                 autoComplete="username"
                 disabled={props.busy}
-                minLength={1}
+                minLength={3}
                 maxLength={32}
                 placeholder="ada_secure"
                 required
+                spellCheck={false}
                 value={loginForm.username}
                 onChange={(event) =>
                   setLoginForm((current) => ({

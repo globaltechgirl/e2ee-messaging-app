@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ChatMessage, ConversationSummary, UserPublicInfo } from "../types";
 
 interface MessagePanelProps {
@@ -10,21 +10,64 @@ interface MessagePanelProps {
   sending: boolean;
   error: string | null;
   onLoadOlder: () => Promise<void>;
-  onSend: (value: string) => Promise<void>;
+  onSend: (value: string) => Promise<boolean>;
 }
 
 export function MessagePanel(props: MessagePanelProps) {
   const [draft, setDraft] = useState("");
   const threadBottomRef = useRef<HTMLDivElement | null>(null);
+  const threadBodyRef = useRef<HTMLDivElement | null>(null);
+  const previousConversationIdRef = useRef<string | null>(null);
+  const previousLoadingOlderRef = useRef(false);
+  const previousMessageCountRef = useRef(0);
+  const preserveScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  const stickToBottomRef = useRef(true);
 
-  useEffect(() => {
-    if (!props.loadingOlder) {
-      threadBottomRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
+  const conversationUserId = props.conversation
+    ? "user_id" in props.conversation
+      ? props.conversation.user_id
+      : props.conversation.id
+    : null;
+
+  useLayoutEffect(() => {
+    const container = threadBodyRef.current;
+
+    if (!container || !conversationUserId) {
+      previousConversationIdRef.current = conversationUserId;
+      previousLoadingOlderRef.current = props.loadingOlder;
+      previousMessageCountRef.current = props.messages.length;
+      preserveScrollRef.current = null;
+      stickToBottomRef.current = true;
+      return;
     }
-  }, [props.messages.length, props.loadingOlder]);
+
+    if (props.loadingOlder && !previousLoadingOlderRef.current) {
+      preserveScrollRef.current = {
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      };
+    }
+
+    if (!props.loadingOlder && previousLoadingOlderRef.current && preserveScrollRef.current) {
+      const snapshot = preserveScrollRef.current;
+      container.scrollTop = snapshot.scrollTop + (container.scrollHeight - snapshot.scrollHeight);
+      preserveScrollRef.current = null;
+    } else {
+      const conversationChanged = previousConversationIdRef.current !== conversationUserId;
+      const messageCountChanged = previousMessageCountRef.current !== props.messages.length;
+
+      if (conversationChanged || (messageCountChanged && stickToBottomRef.current)) {
+        threadBottomRef.current?.scrollIntoView({
+          behavior: conversationChanged ? "auto" : "smooth",
+          block: "end",
+        });
+      }
+    }
+
+    previousConversationIdRef.current = conversationUserId;
+    previousLoadingOlderRef.current = props.loadingOlder;
+    previousMessageCountRef.current = props.messages.length;
+  }, [conversationUserId, props.loadingOlder, props.messages.length]);
 
   if (!props.conversation) {
     return (
@@ -40,8 +83,6 @@ export function MessagePanel(props: MessagePanelProps) {
     );
   }
 
-  const userId = "user_id" in props.conversation ? props.conversation.user_id : props.conversation.id;
-
   return (
     <section className="thread">
       <header className="thread__header">
@@ -56,9 +97,22 @@ export function MessagePanel(props: MessagePanelProps) {
         </div>
       </header>
 
-      <div className="thread__body">
+      <div
+        ref={threadBodyRef}
+        className="thread__body"
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+          stickToBottomRef.current = distanceFromBottom < 48;
+        }}
+      >
         {props.hasOlderMessages ? (
-          <button className="ghost-button ghost-button--center" type="button" onClick={() => void props.onLoadOlder()}>
+          <button
+            className="ghost-button ghost-button--center"
+            disabled={props.loadingOlder}
+            type="button"
+            onClick={() => void props.onLoadOlder()}
+          >
             {props.loadingOlder ? "Loading older ciphertext..." : "Load older messages"}
           </button>
         ) : null}
@@ -98,7 +152,7 @@ export function MessagePanel(props: MessagePanelProps) {
 
       <form
         className="composer"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
 
           const value = draft.trim();
@@ -107,14 +161,20 @@ export function MessagePanel(props: MessagePanelProps) {
             return;
           }
 
-          void props.onSend(value).then(() => setDraft(""));
+          const sent = await props.onSend(value);
+
+          if (sent) {
+            setDraft("");
+          }
         }}
       >
         <input
-          aria-label={`Encrypted message for ${userId}`}
+          aria-label={`Encrypted message for ${conversationUserId}`}
+          autoComplete="off"
           disabled={props.sending}
           maxLength={4000}
           placeholder="Write an encrypted message"
+          spellCheck={false}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />

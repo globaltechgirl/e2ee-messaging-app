@@ -4,12 +4,27 @@ const DB_NAME = "whisperbox-secure-store";
 const STORE_NAME = "vault";
 const SESSION_KEY = "session";
 
+export class StorageUnavailableError extends Error {
+  constructor(message = "Secure device storage is unavailable in this browser.") {
+    super(message);
+    this.name = "StorageUnavailableError";
+  }
+}
+
 function openDatabase(): Promise<IDBDatabase> {
+  if (typeof indexedDB === "undefined") {
+    return Promise.reject(new StorageUnavailableError());
+  }
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
 
     request.onerror = () => {
       reject(request.error ?? new Error("Unable to open secure storage."));
+    };
+
+    request.onblocked = () => {
+      reject(new StorageUnavailableError("Secure storage is blocked by another tab or the browser."));
     };
 
     request.onupgradeneeded = () => {
@@ -26,51 +41,85 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
-async function withStore<T>(
-  mode: IDBTransactionMode,
-  run: (store: IDBObjectStore, resolve: (value: T) => void, reject: (reason?: unknown) => void) => void,
-): Promise<T> {
-  const database = await openDatabase();
-
-  return new Promise<T>((resolve, reject) => {
-    const transaction = database.transaction(STORE_NAME, mode);
-    const store = transaction.objectStore(STORE_NAME);
-
-    transaction.oncomplete = () => {
-      database.close();
-    };
-
-    transaction.onerror = () => {
-      reject(transaction.error ?? new Error("IndexedDB transaction failed."));
-    };
-
-    run(store, resolve, reject);
-  });
-}
-
 export function loadPersistedSession(): Promise<PersistedSession | null> {
-  return withStore<PersistedSession | null>("readonly", (store, resolve, reject) => {
-    const request = store.get(SESSION_KEY);
+  return openDatabase().then(
+    (database) =>
+      new Promise<PersistedSession | null>((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(SESSION_KEY);
 
-    request.onerror = () => reject(request.error ?? new Error("Unable to read secure storage."));
-    request.onsuccess = () => resolve((request.result as PersistedSession | undefined) ?? null);
-  });
+        request.onerror = () => {
+          reject(request.error ?? new Error("Unable to read secure storage."));
+        };
+        request.onsuccess = () => {
+          resolve((request.result as PersistedSession | undefined) ?? null);
+        };
+        transaction.oncomplete = () => {
+          database.close();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error ?? new Error("IndexedDB transaction failed."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error ?? new Error("IndexedDB transaction was aborted."));
+        };
+      }),
+  );
 }
 
 export function savePersistedSession(session: PersistedSession): Promise<void> {
-  return withStore<void>("readwrite", (store, resolve, reject) => {
-    const request = store.put(session, SESSION_KEY);
+  return openDatabase().then(
+    (database) =>
+      new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.put(session, SESSION_KEY);
 
-    request.onerror = () => reject(request.error ?? new Error("Unable to persist secure session."));
-    request.onsuccess = () => resolve();
-  });
+        request.onerror = () => {
+          reject(request.error ?? new Error("Unable to persist secure session."));
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error ?? new Error("IndexedDB transaction failed."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error ?? new Error("IndexedDB transaction was aborted."));
+        };
+      }),
+  );
 }
 
 export function clearPersistedSession(): Promise<void> {
-  return withStore<void>("readwrite", (store, resolve, reject) => {
-    const request = store.delete(SESSION_KEY);
+  return openDatabase().then(
+    (database) =>
+      new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readwrite");
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete(SESSION_KEY);
 
-    request.onerror = () => reject(request.error ?? new Error("Unable to clear secure session."));
-    request.onsuccess = () => resolve();
-  });
+        request.onerror = () => {
+          reject(request.error ?? new Error("Unable to clear secure session."));
+        };
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error ?? new Error("IndexedDB transaction failed."));
+        };
+        transaction.onabort = () => {
+          database.close();
+          reject(transaction.error ?? new Error("IndexedDB transaction was aborted."));
+        };
+      }),
+  );
 }

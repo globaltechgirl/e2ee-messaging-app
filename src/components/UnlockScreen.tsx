@@ -42,6 +42,7 @@ export function UnlockScreen(props: UnlockScreenProps) {
               autoComplete="current-password"
               disabled={props.busy}
               minLength={8}
+              maxLength={128}
               placeholder="Enter your password"
               required
               type="password"

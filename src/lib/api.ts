@@ -38,6 +38,7 @@ interface AuthContext {
 
 export class WhisperApiClient {
   private readonly auth: AuthContext;
+  private refreshPromise: Promise<TokenResponse> | null = null;
 
   constructor(auth: AuthContext) {
     this.auth = auth;
@@ -45,7 +46,11 @@ export class WhisperApiClient {
 
   private async request<T>(path: string, init: RequestInit = {}, requiresAuth = true): Promise<T> {
     const headers = new Headers(init.headers);
-    headers.set("Content-Type", "application/json");
+    headers.set("Accept", "application/json");
+
+    if (init.body) {
+      headers.set("Content-Type", "application/json");
+    }
 
     if (requiresAuth) {
       const session = this.auth.getSession();
@@ -131,23 +136,33 @@ export class WhisperApiClient {
   }
 
   async refreshAccessToken() {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
     const session = this.auth.getSession();
 
     if (!session?.refreshToken) {
       throw new ApiError(401, "Refresh token missing.");
     }
 
-    const token = await this.request<TokenResponse>(
+    this.refreshPromise = this.request<TokenResponse>(
       "/auth/refresh",
       {
         method: "POST",
         body: JSON.stringify({ refresh_token: session.refreshToken }),
       },
       false,
-    );
+    )
+      .then((token) => {
+        this.auth.setAccessToken(token);
+        return token;
+      })
+      .finally(() => {
+        this.refreshPromise = null;
+      });
 
-    this.auth.setAccessToken(token);
-    return token;
+    return this.refreshPromise;
   }
 
   async logout() {

@@ -28,7 +28,7 @@ interface MessagingState {
   selectConversation: (user: UserPublicInfo | ConversationSummary) => Promise<void>;
   setSearchQuery: (value: string) => void;
   refreshSearch: () => Promise<void>;
-  sendMessage: (user: UserPublicInfo | ConversationSummary, value: string) => Promise<void>;
+  sendMessage: (user: UserPublicInfo | ConversationSummary, value: string) => Promise<boolean>;
   loadOlderMessages: () => Promise<void>;
   refreshConversations: () => Promise<void>;
 }
@@ -62,8 +62,8 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
   const reconnectTimerRef = useRef<number | null>(null);
   const reconnectAttemptRef = useRef(0);
   const publicKeyCacheRef = useRef(new Map<string, string>());
-  const refreshTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
+  const searchRequestIdRef = useRef(0);
   const userClosedSocketRef = useRef(false);
 
   const activeMessages = selectedConversationUserId ? messagesByUserId[selectedConversationUserId] ?? [] : [];
@@ -173,9 +173,9 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       setConversations(nextConversations);
       updateDirectory(nextConversations);
 
-      if (!selectedConversationUserId && nextConversations[0]) {
+      if (nextConversations[0]) {
         startTransition(() => {
-          setSelectedConversationUserId(nextConversations[0].user_id);
+          setSelectedConversationUserId((current) => current ?? nextConversations[0].user_id);
         });
       }
     } catch (error) {
@@ -245,6 +245,9 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       return;
     }
 
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+
     if (!query.trim()) {
       setSearch({
         query: "",
@@ -263,7 +266,12 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
     }));
 
     try {
-      const results = await api.searchUsers(query.trim());
+      const results = (await api.searchUsers(query.trim())).filter((user) => user.id !== session.user.id);
+
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+
       updateDirectory(results);
       setSearch({
         query,
@@ -272,6 +280,10 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
         error: null,
       });
     } catch (error) {
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+
       const message = error instanceof Error ? error.message : "User search failed.";
       setSearch({
         query,
@@ -308,13 +320,13 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
 
   async function sendMessage(user: UserPublicInfo | ConversationSummary, value: string) {
     if (!api || !session) {
-      return;
+      return false;
     }
 
     const trimmed = value.trim();
 
     if (!trimmed) {
-      return;
+      return false;
     }
 
     const userId = "user_id" in user ? user.user_id : user.id;
@@ -351,6 +363,7 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       const storedMessage = await api.sendMessage(userId, payload);
       await upsertDeliveredMessage(storedMessage, "rest");
       await loadConversations();
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to send message.";
       setMessagesByUserId((current) => ({
@@ -368,6 +381,7 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
         }),
       }));
       setActionError(message);
+      return false;
     } finally {
       setSending(false);
     }
@@ -409,14 +423,19 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
   useEffect(() => {
     if (!api || !session) {
       setConversations([]);
+      setCursorByConversation({});
+      setHasOlderByConversation({});
       setMessagesByUserId({});
       setSelectedConversationUserId(null);
+      setUserDirectory({});
       setSearch({
         query: "",
         loading: false,
         results: [],
         error: null,
       });
+      setSearchQuery("");
+      setActionError(null);
       setWsStatus("idle");
       publicKeyCacheRef.current.clear();
       return;
@@ -429,6 +448,7 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
     if (!session || !api) {
       if (reconnectTimerRef.current) {
         window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
 
       if (wsRef.current) {
@@ -443,6 +463,11 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
     userClosedSocketRef.current = false;
     setWsStatus("connecting");
 
+    if (reconnectTimerRef.current) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
     const socket = new WebSocket(`${WS_BASE_URL}/ws?token=${encodeURIComponent(session.accessToken)}`);
     wsRef.current = socket;
 
@@ -452,11 +477,15 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
     };
 
     socket.onmessage = (event) => {
+      if (typeof event.data !== "string") {
+        return;
+      }
+
       try {
         const parsed = JSON.parse(event.data) as WebSocketFrame | WebSocketFrame[] | MessageResponse[];
         void handleFrame(parsed);
       } catch {
-        setWsStatus("error");
+        // Ignore keep-alive or non-JSON control frames.
       }
     };
 
@@ -498,6 +527,10 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
 
     return () => {
       userClosedSocketRef.current = true;
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       socket.close();
       wsRef.current = null;
     };
@@ -510,9 +543,6 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       mountedRef.current = false;
       if (reconnectTimerRef.current) {
         window.clearTimeout(reconnectTimerRef.current);
-      }
-      if (refreshTimerRef.current) {
-        window.clearTimeout(refreshTimerRef.current);
       }
     };
   }, []);

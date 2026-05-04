@@ -43,7 +43,10 @@ export function ConversationList(props: ConversationListProps) {
       <label className="search-panel">
         <span>Find people</span>
         <input
+          autoCapitalize="none"
+          autoComplete="off"
           placeholder="Search by username or display name"
+          spellCheck={false}
           value={props.searchQuery}
           onChange={(event) => props.onSearchChange(event.target.value)}
         />
