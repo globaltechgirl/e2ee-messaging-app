@@ -266,21 +266,6 @@ function parseEnvelope(value: string): DecryptedMessage {
   const extracted = extractEnvelope(value);
 
   if (extracted) {
-    if (typeof extracted.body === "string") {
-      try {
-        const parsed = JSON.parse(extracted.body);
-
-        if (parsed && typeof parsed.body === "string") {
-          return {
-            body: parsed.body,
-            nonce: parsed.nonce ?? extracted.nonce,
-            sentAt: parsed.sentAt ?? extracted.sentAt,
-          };
-        }
-      } catch (e) {
-      }
-    }
-
     return extracted;
   }
 
@@ -352,9 +337,11 @@ export async function decryptMessage(
     base64ToArrayBuffer(message.payload.ciphertext),
   );
 
- const rawText = bytesToText(plaintextBuffer);
+const rawText = bytesToText(plaintextBuffer);
 
-  const parsed = parseEnvelope(rawText);
+const parsed = parseEnvelope(rawText);
 
-  return parsed;
+console.log("💬 FINAL MESSAGE BODY:", parsed.body);
+
+return parsed;
 }
