@@ -1,5 +1,5 @@
 import { arrayBufferToBase64, base64ToArrayBuffer, bytesToText, randomBase64, textToBytes } from "./encoding";
-import type { DecryptedEnvelope, DecryptedMessage, EncryptedPayload, MessageResponse } from "../types";
+import type { DecryptedMessage, EncryptedPayload, MessageResponse } from "../types";
 
 const AES_GCM_IV_BYTES = 12;
 const PBKDF2_ITERATIONS = 310000;

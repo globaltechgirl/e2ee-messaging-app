@@ -87,10 +87,6 @@ export interface LoginForm {
   password: string;
 }
 
-export interface DecryptedEnvelope {
-  body: string;
-}
-
 export interface DecryptedMessage {
   body: string;
   nonce?: string;
