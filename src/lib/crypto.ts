@@ -272,18 +272,42 @@ function parseEnvelope(value: string): DecryptedMessage {
   return { body: value };
 }
 
-function isEncryptedPayload(payload: unknown): payload is EncryptedPayload {
-  if (!payload || typeof payload !== "object") {
-    return false;
+function getStringField(object: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = object[key];
+    if (typeof value === "string") {
+      return value;
+    }
   }
 
-  const candidate = payload as Partial<EncryptedPayload>;
-  return (
-    typeof candidate.ciphertext === "string" &&
-    typeof candidate.iv === "string" &&
-    typeof candidate.encryptedKey === "string" &&
-    typeof candidate.encryptedKeyForSelf === "string"
-  );
+  return undefined;
+}
+
+function normalizeEncryptedPayload(payload: unknown): EncryptedPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const ciphertext = getStringField(record, "ciphertext");
+  const iv = getStringField(record, "iv");
+  const encryptedKey = getStringField(record, "encryptedKey", "encrypted_key");
+  const encryptedKeyForSelf = getStringField(record, "encryptedKeyForSelf", "encrypted_key_for_self");
+
+  if (ciphertext && iv && encryptedKey && encryptedKeyForSelf) {
+    return {
+      ciphertext,
+      iv,
+      encryptedKey,
+      encryptedKeyForSelf,
+    };
+  }
+
+  return null;
+}
+
+function isEncryptedPayload(payload: unknown): payload is EncryptedPayload {
+  return normalizeEncryptedPayload(payload) !== null;
 }
 
 export async function decryptMessage(
@@ -293,22 +317,24 @@ export async function decryptMessage(
 ): Promise<DecryptedMessage> {
   ensureCryptoAvailable();
 
+  const normalizedPayload = normalizeEncryptedPayload(message.payload);
+  const payload = normalizedPayload ?? message.payload;
   const fallbackBody =
-    typeof message.payload === "string"
-      ? message.payload
-      : isRecord(message.payload) && typeof message.payload.body === "string"
-        ? message.payload.body
+    typeof payload === "string"
+      ? payload
+      : isRecord(payload) && typeof payload.body === "string"
+        ? payload.body
         : null;
 
-  if (!isEncryptedPayload(message.payload) && fallbackBody !== null) {
+  if (!isEncryptedPayload(payload) && fallbackBody !== null) {
     console.warn(
       "Warning: Message received with plaintext payload instead of encrypted payload. " +
         "This may indicate a backend configuration issue."
     );
-    return extractEnvelope(message.payload) ?? extractEnvelope(fallbackBody) ?? { body: fallbackBody };
+    return extractEnvelope(payload) ?? extractEnvelope(fallbackBody) ?? { body: fallbackBody };
   }
 
-  if (!isEncryptedPayload(message.payload)) {
+  if (!isEncryptedPayload(payload)) {
     console.error(
       "Unsupported encrypted payload format. Payload structure:",
       message.payload
@@ -316,7 +342,7 @@ export async function decryptMessage(
     throw new Error("Unsupported encrypted payload format.");
   }
 
-  const wrappedKey = message.from_user_id === selfUserId ? message.payload.encryptedKeyForSelf : message.payload.encryptedKey;
+  const wrappedKey = message.from_user_id === selfUserId ? payload.encryptedKeyForSelf : payload.encryptedKey;
   const rawMessageKey = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, base64ToArrayBuffer(wrappedKey));
   const messageKey = await crypto.subtle.importKey(
     "raw",
@@ -331,10 +357,10 @@ export async function decryptMessage(
   const plaintextBuffer = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv: base64ToArrayBuffer(message.payload.iv),
+      iv: base64ToArrayBuffer((payload as EncryptedPayload).iv),
     },
     messageKey,
-    base64ToArrayBuffer(message.payload.ciphertext),
+    base64ToArrayBuffer((payload as EncryptedPayload).ciphertext),
   );
 
   const rawText = new TextDecoder().decode(plaintextBuffer);
