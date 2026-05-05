@@ -263,7 +263,28 @@ function extractEnvelope(value: unknown, depth = 0): DecryptedMessage | null {
 }
 
 function parseEnvelope(value: string): DecryptedMessage {
-  return extractEnvelope(value) ?? { body: value };
+  const extracted = extractEnvelope(value);
+
+  if (extracted) {
+    if (typeof extracted.body === "string") {
+      try {
+        const parsed = JSON.parse(extracted.body);
+
+        if (parsed && typeof parsed.body === "string") {
+          return {
+            body: parsed.body,
+            nonce: parsed.nonce ?? extracted.nonce,
+            sentAt: parsed.sentAt ?? extracted.sentAt,
+          };
+        }
+      } catch (e) {
+      }
+    }
+
+    return extracted;
+  }
+
+  return { body: value };
 }
 
 function isEncryptedPayload(payload: unknown): payload is EncryptedPayload {
@@ -331,5 +352,9 @@ export async function decryptMessage(
     base64ToArrayBuffer(message.payload.ciphertext),
   );
 
-  return parseEnvelope(bytesToText(plaintextBuffer));
+ const rawText = bytesToText(plaintextBuffer);
+
+  const parsed = parseEnvelope(rawText);
+
+  return parsed;
 }
