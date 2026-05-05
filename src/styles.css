@@ -343,7 +343,7 @@ input::placeholder {
   background: var(--panel);
   backdrop-filter: blur(18px);
   box-shadow: var(--shadow);
-  min-height: calc(100vh - 2.4rem);
+  height: calc(100vh - 2.4rem);
 }
 
 .sidebar {
