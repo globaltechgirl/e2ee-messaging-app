@@ -404,14 +404,16 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       return;
     }
 
-    const messages = extractIncomingMessages(frame);
+    const messages = extractIncomingMessages(frame).filter(
+      (m) => m.from_user_id !== session.user.id
+    );
 
     if (!messages.length) {
       return;
     }
 
     const transformed = await Promise.all(messages.map((message) => transformMessage(message, "ws")));
-
+    
     setMessagesByUserId((current) => {
       const next = { ...current };
 
