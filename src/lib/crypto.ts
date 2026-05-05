@@ -238,6 +238,13 @@ function extractEnvelope(value: unknown, depth = 0): DecryptedMessage | null {
       typeof sentAt === "string");
 
   if (hasEnvelopeHints && body !== null) {
+    // Try to extract nested envelope from body if it's JSON
+    if (body.startsWith("{") || body.startsWith("[")) {
+      const nested = extractEnvelope(body, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
     return {
       body,
       nonce,
@@ -365,5 +372,11 @@ export async function decryptMessage(
 
   const rawText = new TextDecoder().decode(plaintextBuffer);
   const parsed = parseEnvelope(rawText);
-  return { body: parsed.body };
+  console.log("DEBUG decryptMessage - rawText:", rawText);
+  console.log("DEBUG decryptMessage - parsed:", parsed);
+  return {
+    body: parsed.body,
+    nonce: parsed.nonce,
+    sentAt: parsed.sentAt,
+  };
 }
