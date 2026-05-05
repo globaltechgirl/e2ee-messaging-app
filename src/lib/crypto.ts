@@ -211,8 +211,17 @@ function parseEnvelope(value: string): DecryptedMessage {
         sentAt: typeof parsed.sentAt === "string" ? parsed.sentAt : undefined,
       };
     }
-  } catch {
+
+    // If parsed has a version field but body isn't a string, that's malformed
+    if (typeof parsed.version === "number") {
+      console.warn("Malformed envelope: version present but body is not a string", parsed);
+      return {
+        body: "[Malformed message format - invalid body type]",
+      };
+    }
+  } catch (error) {
     // Gracefully fall back to raw text for older or malformed payloads.
+    console.warn("Failed to parse envelope", error, value);
   }
 
   return {
@@ -241,7 +250,39 @@ export async function decryptMessage(
 ): Promise<DecryptedMessage> {
   ensureCryptoAvailable();
 
+  // Check if payload has a direct "body" field with JSON envelope (backend issue fallback)
+  if (
+    typeof (message.payload as any)?.body === "string" &&
+    !isEncryptedPayload(message.payload)
+  ) {
+    console.warn(
+      "Warning: Message received with plaintext body field instead of encrypted payload. " +
+        "This may indicate a backend configuration issue."
+    );
+    const bodyText = (message.payload as any).body;
+    // Try to parse it as an envelope
+    try {
+      const parsed = JSON.parse(bodyText) as Partial<DecryptedEnvelope>;
+      if (typeof parsed.body === "string") {
+        return {
+          body: parsed.body,
+          nonce: typeof parsed.nonce === "string" ? parsed.nonce : undefined,
+          sentAt: typeof parsed.sentAt === "string" ? parsed.sentAt : undefined,
+        };
+      }
+    } catch {
+      // Not an envelope, return as-is
+      return { body: bodyText };
+    }
+    // If it has version but invalid structure
+    return { body: bodyText };
+  }
+
   if (!isEncryptedPayload(message.payload)) {
+    console.error(
+      "Unsupported encrypted payload format. Payload structure:",
+      message.payload
+    );
     throw new Error("Unsupported encrypted payload format.");
   }
 
