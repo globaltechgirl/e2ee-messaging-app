@@ -92,6 +92,21 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
 
     try {
       const decrypted = await decryptMessage(message, session.privateKey, session.user.id);
+      let body = decrypted.body;
+
+      try {
+        const parsed = JSON.parse(body) as unknown;
+
+        if (typeof parsed === "object" && parsed !== null && "body" in parsed) {
+          const parsedRecord = parsed as Record<string, unknown>;
+          if (typeof parsedRecord.body === "string") {
+            body = parsedRecord.body;
+          }
+        }
+      } catch {
+        // keep original decrypted body if it is not JSON
+      }
+
       return {
         id: message.id,
         conversationUserId,
@@ -100,7 +115,7 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
         direction: message.from_user_id === session.user.id ? "outgoing" : "incoming",
         createdAt: decrypted.sentAt ?? message.created_at,
         decrypted: true,
-        body: decrypted.body,
+        body,
         status: "sent",
         delivered: message.delivered,
         nonce: decrypted.nonce,
