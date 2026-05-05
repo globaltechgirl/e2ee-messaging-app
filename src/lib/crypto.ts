@@ -337,11 +337,7 @@ export async function decryptMessage(
     base64ToArrayBuffer(message.payload.ciphertext),
   );
 
-const rawText = bytesToText(plaintextBuffer);
-
-const parsed = parseEnvelope(rawText);
-
-console.log("💬 FINAL MESSAGE BODY:", parsed.body);
-
-return parsed;
+  const rawText = new TextDecoder().decode(plaintextBuffer);
+  const parsed = parseEnvelope(rawText);
+  return { body: parsed.body };
 }
