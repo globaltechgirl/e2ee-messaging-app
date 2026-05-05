@@ -200,37 +200,70 @@ export async function encryptMessage(
   };
 }
 
-function parseEnvelope(value: string): DecryptedMessage {
-  // First, try to parse as a JSON envelope
-  try {
-    const parsed = JSON.parse(value) as Partial<DecryptedEnvelope>;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-    // Valid envelope structure
-    if (typeof parsed.body === "string" && typeof parsed.version === "number") {
-      return {
-        body: parsed.body,
-        nonce: typeof parsed.nonce === "string" ? parsed.nonce : undefined,
-        sentAt: typeof parsed.sentAt === "string" ? parsed.sentAt : undefined,
-      };
-    }
-
-    // Has some envelope-like properties but malformed body
-    if (typeof parsed.version === "number") {
-      console.warn(
-        "Message envelope present but invalid structure (body should be string):",
-        parsed
-      );
-      // Fall through to return raw text
-    }
-  } catch (error) {
-    // Not valid JSON - treat as raw plaintext message
-    // This is acceptable for backward compatibility
+function extractEnvelope(value: unknown, depth = 0): DecryptedMessage | null {
+  if (depth > 4) {
+    return null;
   }
 
-  // Fallback: treat as raw plaintext message (no envelope)
-  return {
-    body: value,
-  };
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return extractEnvelope(parsed, depth + 1);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const body = typeof value.body === "string" ? value.body : null;
+  const nonce = typeof value.nonce === "string" ? value.nonce : undefined;
+  const sentAt =
+    typeof value.sentAt === "string"
+      ? value.sentAt
+      : typeof value.sent_at === "string"
+        ? value.sent_at
+        : undefined;
+  const hasEnvelopeHints =
+    body !== null &&
+    (typeof value.version === "number" ||
+      typeof value.version === "string" ||
+      typeof nonce === "string" ||
+      typeof sentAt === "string");
+
+  if (hasEnvelopeHints && body !== null) {
+    return {
+      body,
+      nonce,
+      sentAt,
+    };
+  }
+
+  if (body !== null) {
+    const nestedBody = extractEnvelope(body, depth + 1);
+    if (nestedBody) {
+      return nestedBody;
+    }
+  }
+
+  for (const candidate of [value.payload, value.message, value.data]) {
+    const nested = extractEnvelope(candidate, depth + 1);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function parseEnvelope(value: string): DecryptedMessage {
+  return extractEnvelope(value) ?? { body: value };
 }
 
 function isEncryptedPayload(payload: unknown): payload is EncryptedPayload {
@@ -254,32 +287,19 @@ export async function decryptMessage(
 ): Promise<DecryptedMessage> {
   ensureCryptoAvailable();
 
-  // Check if payload has a direct "body" field with JSON envelope (backend issue fallback)
-  if (
-    typeof (message.payload as any)?.body === "string" &&
-    !isEncryptedPayload(message.payload)
-  ) {
+  const fallbackBody =
+    typeof message.payload === "string"
+      ? message.payload
+      : isRecord(message.payload) && typeof message.payload.body === "string"
+        ? message.payload.body
+        : null;
+
+  if (!isEncryptedPayload(message.payload) && fallbackBody !== null) {
     console.warn(
-      "Warning: Message received with plaintext body field instead of encrypted payload. " +
+      "Warning: Message received with plaintext payload instead of encrypted payload. " +
         "This may indicate a backend configuration issue."
     );
-    const bodyText = (message.payload as any).body;
-    // Try to parse it as an envelope
-    try {
-      const parsed = JSON.parse(bodyText) as Partial<DecryptedEnvelope>;
-      if (typeof parsed.body === "string") {
-        return {
-          body: parsed.body,
-          nonce: typeof parsed.nonce === "string" ? parsed.nonce : undefined,
-          sentAt: typeof parsed.sentAt === "string" ? parsed.sentAt : undefined,
-        };
-      }
-    } catch {
-      // Not an envelope, return as-is
-      return { body: bodyText };
-    }
-    // If it has version but invalid structure
-    return { body: bodyText };
+    return extractEnvelope(message.payload) ?? extractEnvelope(fallbackBody) ?? { body: fallbackBody };
   }
 
   if (!isEncryptedPayload(message.payload)) {
