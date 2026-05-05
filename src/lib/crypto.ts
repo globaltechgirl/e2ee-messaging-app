@@ -201,10 +201,12 @@ export async function encryptMessage(
 }
 
 function parseEnvelope(value: string): DecryptedMessage {
+  // First, try to parse as a JSON envelope
   try {
     const parsed = JSON.parse(value) as Partial<DecryptedEnvelope>;
 
-    if (typeof parsed.body === "string") {
+    // Valid envelope structure
+    if (typeof parsed.body === "string" && typeof parsed.version === "number") {
       return {
         body: parsed.body,
         nonce: typeof parsed.nonce === "string" ? parsed.nonce : undefined,
@@ -212,18 +214,20 @@ function parseEnvelope(value: string): DecryptedMessage {
       };
     }
 
-    // If parsed has a version field but body isn't a string, that's malformed
+    // Has some envelope-like properties but malformed body
     if (typeof parsed.version === "number") {
-      console.warn("Malformed envelope: version present but body is not a string", parsed);
-      return {
-        body: "[Malformed message format - invalid body type]",
-      };
+      console.warn(
+        "Message envelope present but invalid structure (body should be string):",
+        parsed
+      );
+      // Fall through to return raw text
     }
   } catch (error) {
-    // Gracefully fall back to raw text for older or malformed payloads.
-    console.warn("Failed to parse envelope", error, value);
+    // Not valid JSON - treat as raw plaintext message
+    // This is acceptable for backward compatibility
   }
 
+  // Fallback: treat as raw plaintext message (no envelope)
   return {
     body: value,
   };

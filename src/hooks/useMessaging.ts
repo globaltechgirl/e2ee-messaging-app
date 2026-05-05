@@ -92,8 +92,6 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
 
     try {
       const decrypted = await decryptMessage(message, session.privateKey, session.user.id);
-      console.log("Message decrypted successfully:", { body: decrypted.body, nonce: decrypted.nonce });
-
       return {
         id: message.id,
         conversationUserId,
@@ -109,7 +107,11 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
         transport,
       };
     } catch (error) {
-      console.error("Failed to decrypt message:", { error: error instanceof Error ? error.message : error, messageId: message.id, payload: message.payload });
+      console.error("Failed to decrypt message:", { 
+        error: error instanceof Error ? error.message : error, 
+        messageId: message.id, 
+        payloadKeys: message.payload ? Object.keys(message.payload) : []
+      });
       return {
         id: message.id,
         conversationUserId,
