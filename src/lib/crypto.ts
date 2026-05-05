@@ -165,16 +165,14 @@ export async function encryptMessage(
   );
   const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
   const nonce = crypto.randomUUID();
-  const envelope: DecryptedEnvelope = {
-    body: plaintext,
-  };
+
   const ciphertext = await crypto.subtle.encrypt(
     {
       name: "AES-GCM",
       iv,
     },
     messageKey,
-    textToBytes(JSON.stringify(envelope)),
+    textToBytes(plaintext),
   );
   const exportedMessageKey = await crypto.subtle.exportKey("raw", messageKey);
   const [recipientPublicKey, senderPublicKey] = await Promise.all([
