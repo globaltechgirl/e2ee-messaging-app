@@ -310,10 +310,7 @@ export default function App() {
   if (state.kind === "booting") {
     return (
       <main className="boot-screen">
-        <div className="boot-card">
-          <p>Initializing secure workspace</p>
-          <h1>Loading wrapped keys, session metadata, and encrypted threads.</h1>
-        </div>
+        <p>Initializing secure workspace</p>
       </main>
     );
   }

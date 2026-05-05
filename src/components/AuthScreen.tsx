@@ -51,7 +51,7 @@ export function AuthScreen(props: AuthScreenProps) {
           </article>
           <article>
             <span>Session security</span>
-            <strong>Short-lived access tokens with refresh</strong>
+            <strong>Short-lived access tokens</strong>
           </article>
         </div>
       </section>
@@ -68,7 +68,7 @@ export function AuthScreen(props: AuthScreenProps) {
               type="button"
               onClick={() => props.onModeChange("login")}
             >
-              Log in
+              Login
             </button>
             <button
               className={props.mode === "register" ? "is-active" : undefined}
