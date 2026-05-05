@@ -34,12 +34,6 @@ export function ConversationList(props: ConversationListProps) {
         <span className={`status-chip status-chip--${props.wsStatus}`}>{labelForSocketState(props.wsStatus)}</span>
       </section>
 
-      <section className="vault-card">
-        <p>Private key status</p>
-        <strong>Unlocked in-memory only</strong>
-        <span>Wrapped key and refresh token are kept in IndexedDB. Plaintext key material is never stored.</span>
-      </section>
-
       <label className="search-panel">
         <span>Find people</span>
         <input
