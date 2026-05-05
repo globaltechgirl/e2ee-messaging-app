@@ -88,10 +88,7 @@ export interface LoginForm {
 }
 
 export interface DecryptedEnvelope {
-  version: 1;
   body: string;
-  nonce: string;
-  sentAt: string;
 }
 
 export interface DecryptedMessage {

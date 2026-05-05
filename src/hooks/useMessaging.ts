@@ -93,8 +93,6 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
     try {
       const decrypted = await decryptMessage(message, session.privateKey, session.user.id);
       let body = decrypted.body;
-      console.log("DEBUG transformMessage - initial body:", body);
-
       // Fallback: try to extract body if it's a nested JSON envelope
       try {
         const parsed = JSON.parse(body) as unknown;
@@ -102,15 +100,12 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
         if (typeof parsed === "object" && parsed !== null && "body" in parsed) {
           const parsedRecord = parsed as Record<string, unknown>;
           if (typeof parsedRecord.body === "string") {
-            console.log("DEBUG transformMessage - found nested body:", parsedRecord.body);
             body = parsedRecord.body;
           }
         }
       } catch {
         // keep original decrypted body if it is not JSON
-        console.log("DEBUG transformMessage - body is not JSON, keeping original");
       }
-      console.log("DEBUG transformMessage - final body:", body);
 
       return {
         id: message.id,

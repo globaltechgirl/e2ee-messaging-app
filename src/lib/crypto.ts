@@ -166,10 +166,7 @@ export async function encryptMessage(
   const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
   const nonce = crypto.randomUUID();
   const envelope: DecryptedEnvelope = {
-    version: 1,
     body: plaintext,
-    nonce,
-    sentAt: new Date().toISOString(),
   };
   const ciphertext = await crypto.subtle.encrypt(
     {
@@ -372,8 +369,6 @@ export async function decryptMessage(
 
   const rawText = new TextDecoder().decode(plaintextBuffer);
   const parsed = parseEnvelope(rawText);
-  console.log("DEBUG decryptMessage - rawText:", rawText);
-  console.log("DEBUG decryptMessage - parsed:", parsed);
   return {
     body: parsed.body,
     nonce: parsed.nonce,
