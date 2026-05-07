@@ -53,14 +53,18 @@ export function UnlockScreen(props: UnlockScreenProps) {
 
           {props.error ? <p className="form-error">{props.error}</p> : null}
 
+          
+        </form>
+
+        <div className="duo-buttons">
           <button className="primary-button" disabled={props.busy} type="submit">
             {props.busy ? "Restoring private key..." : "Unlock secure messages"}
           </button>
-        </form>
 
-        <button className="ghost-button" disabled={props.busy} type="button" onClick={() => void props.onLogout()}>
-          Sign out instead
-        </button>
+          <button className="ghost-buttons" disabled={props.busy} type="button" onClick={() => void props.onLogout()}>
+            Sign out instead
+          </button>
+        </div>
       </section>
     </main>
   );

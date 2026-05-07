@@ -84,7 +84,28 @@ input::placeholder {
   padding: 0.4rem 0.8rem;
   font-size: 0.8rem;
   font-weight: 600;
+  color: var(--accent-strong);
+  background: rgba(15, 109, 86, 0.1);
+  border-color: rgba(15, 109, 86, 0.18);
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.ghost-buttons {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.9rem 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  background: rgba(15, 109, 86, 0.1);
+  border-color: rgba(15, 109, 86, 0.18);
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.duo-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 1.5rem;
 }
 
 .primary-button {
@@ -96,12 +117,6 @@ input::placeholder {
 .primary-button:hover:not(:disabled),
 .ghost-button:hover:not(:disabled) {
   transform: translateY(-1px);
-}
-
-.ghost-button {
-  color: var(--accent-strong);
-  background: rgba(15, 109, 86, 0.1);
-  border-color: rgba(15, 109, 86, 0.18);
 }
 
 .primary-button:disabled,
@@ -195,6 +210,12 @@ input::placeholder {
   max-width: 18ch;
   margin-top: 1rem;
   margin-bottom: 2rem;
+}
+
+.unlock-card h1 {
+  font-size: clamp(1rem, 4vw, 2rem);
+  max-width: 30ch;
+  margin-bottom: 0rem;
 }
 
 .auth-hero p,
