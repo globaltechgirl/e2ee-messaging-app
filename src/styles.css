@@ -91,6 +91,7 @@ input::placeholder {
 }
 
 .ghost-buttons {
+  width: 100%;
   border-radius: 999px;
   border: 1px solid transparent;
   padding: 0.9rem 1.2rem;
