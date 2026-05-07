@@ -70,12 +70,20 @@ input::placeholder {
   color: #7a8c84;
 }
 
-.primary-button,
-.ghost-button {
+.primary-button {
   border-radius: 999px;
   border: 1px solid transparent;
   padding: 0.9rem 1.2rem;
   font-weight: 700;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.ghost-button {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
@@ -91,9 +99,9 @@ input::placeholder {
 }
 
 .ghost-button {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: var(--border);
-  color: var(--text);
+  color: var(--accent-strong);
+  background: rgba(15, 109, 86, 0.1);
+  border-color: rgba(15, 109, 86, 0.18);
 }
 
 .primary-button:disabled,

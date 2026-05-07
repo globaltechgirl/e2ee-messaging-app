@@ -380,7 +380,22 @@ export function useMessaging(session: ReadySession | null, api: WhisperApiClient
       setConversations((current) => upsertConversation(current, user));
 
       const storedMessage = await api.sendMessage(userId, payload);
-      await upsertDeliveredMessage(storedMessage, "rest");
+
+      const deliveredMessage = await transformMessage(storedMessage, "rest");
+
+      setMessagesByUserId((current) => ({
+        ...current,
+        [userId]: (current[userId] ?? []).map((message) =>
+          message.id === optimisticId
+            ? {
+                ...deliveredMessage,
+                nonce,
+                status: "sent",
+              }
+            : message
+        ),
+      }));
+
       await loadConversations();
       return true;
     } catch (error) {
