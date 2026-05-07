@@ -35,7 +35,7 @@ export function AuthScreen(props: AuthScreenProps) {
   return (
     <main className="auth-shell">
       <section className="auth-hero">
-        <div className="auth-hero__eyebrow">WhisperBox Secure Messaging</div>
+        <div className="auth-hero__eyebrow">Whispy Secure Messaging</div>
         <h1>Private conversations that stay private.</h1>
         <p>
           Keys are generated in your browser, private keys stay wrapped, and the backend stores ciphertext only.

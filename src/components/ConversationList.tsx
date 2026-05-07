@@ -19,7 +19,7 @@ export function ConversationList(props: ConversationListProps) {
       <header className="sidebar__header">
         <div>
           <p className="sidebar__eyebrow">Secure channel</p>
-          <h1>WhisperBox</h1>
+          <h1>Whispy</h1>
         </div>
         <button className="ghost-button" type="button" onClick={() => void props.onLogout()}>
           Sign out

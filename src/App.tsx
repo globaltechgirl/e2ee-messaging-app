@@ -310,7 +310,7 @@ export default function App() {
   if (state.kind === "booting") {
     return (
       <main className="boot-screen">
-        <p>Initializing WhisperBox Secure Chat</p>
+        <p>Initializing Whispy Secure Chat</p>
       </main>
     );
   }
